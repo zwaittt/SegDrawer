@@ -1,0 +1,34 @@
+[
+  {
+    "name": "sam_vit_l.pth",
+    "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth"
+  },
+  {
+    "name": "sam_vit_h.pth",
+    "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth"
+  },
+  {
+    "name": "sam_vit_b.pth",
+    "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+  },
+  {
+    "name": "sam_hq_vit_b.pth",
+    "url": "https://drive.google.com/uc?export=download&id=11yExZLOve38kRZPfRx_MRxfIAKmfMY47"
+  },
+  {
+    "name": "sam_hq_vit_l.pth",
+    "url": "https://drive.google.com/uc?export=download&id=1Uk17tDKX1YAKas5knI4y9ZJCo0lRVL0G"
+  },
+  {
+    "name": "sam_hq_vit_h.pth",
+    "url": "https://drive.google.com/uc?export=download&id=1qobFYrI4eyIANfBSmYcGuWRaSIXfMOQ8"
+  },
+  {
+    "name": "sam_hq_vit_tiny.pth",
+    "url": "https://huggingface.co/lkeab/hq-sam/resolve/main/sam_hq_vit_tiny.pth"
+  },
+  {
+    "name": "mobile_sam.pt",
+    "url": "https://raw.githubusercontent.com/ChaoningZhang/MobileSAM/master/weights/mobile_sam.pt"
+  }
+]

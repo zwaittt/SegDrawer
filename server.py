@@ -3,6 +3,11 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Streamin
 from starlette.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
+from fastapi.staticfiles import StaticFiles
+
+from mobile_sam import SamAutomaticMaskGenerator as MobileSamAutomaticMaskGenerator, sam_model_registry as mobile_sam_model_registry, SamPredictor as MobileSamPredictor
+
+from segment_anything_hq import SamAutomaticMaskGenerator as HqSamAutomaticMaskGenerator, sam_model_registry as Hq_sam_model_registry, SamPredictor as HqSamPredictor
 
 from segment_anything import SamAutomaticMaskGenerator, sam_model_registry, SamPredictor
 
@@ -31,8 +36,13 @@ def read_content(file_path: str) -> str:
 
     return content
 
-sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
-model_type = "vit_l" # "vit_l" or "vit_h"
+# sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
+# sam_checkpoint = "assets/pt/sam_vit_l_0b3195.pth"
+# sam_checkpoint = "assets/pt/sam_hq_vit_l.pth"
+sam_checkpoint = "assets/pt/mobile_sam.pt"
+
+# model_type = "vit_l" # "vit_l" or "vit_h"
+model_type = "vit_t"  # mobile sam
 # device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 if torch.cuda.is_available():
     print('Using GPU')
@@ -42,10 +52,10 @@ else:
     device = 'cpu'
 
 print("Loading model")
-sam = sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+sam = mobile_sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
 print("Finishing loading")
-predictor = SamPredictor(sam)
-mask_generator = SamAutomaticMaskGenerator(sam)
+predictor = MobileSamPredictor(sam)
+mask_generator = MobileSamAutomaticMaskGenerator(sam)
 
 app = FastAPI(debug=True)
 app.add_middleware(
@@ -93,11 +103,15 @@ async def process_images(
     GLOBAL_ZIPBUFFER = None
 
     predictor.set_image(GLOBAL_IMAGE)
-
+    image_embedding = predictor.get_image_embedding().cpu().numpy()
+    # interm_embedding = torch.stack(predictor.interm_features).cpu().numpy()
+    # print("interm embedding", image_embedding.shape)
     # Return a JSON response
     return JSONResponse(
         content={
             "message": "Images received successfully",
+            "data": image_embedding.reshape(-1).tolist(),
+            # "interm_embedding": interm_embedding.reshape(-1).tolist(),
         },
         status_code=200,
     )
@@ -290,14 +304,17 @@ async def click_images(
     print(point_coords)
     print(point_labels)
 
+    multi_output = False
+
     if (len(point_coords) == 1):
         mask_input = None
+        multi_output = True
 
     masks_, scores_, logits_ = predictor.predict(
         point_coords=point_coords,
         point_labels=point_labels,
         mask_input=mask_input,
-        multimask_output=True,
+        multimask_output=multi_output,
     )
 
     best_idx = np.argmax(scores_)
@@ -442,13 +459,18 @@ async def seg_everything():
         status_code=200,
     )
 
-@app.get("/assets/{path}/{file_name}", response_class=FileResponse)
-async def read_assets(path, file_name):
-    return f"assets/{path}/{file_name}"
+# @app.get("/assets/{path}/{file_name}", response_class=FileResponse)
+# async def read_assets(path, file_name):
+#     return f"assets/{path}/{file_name}"
 
-@app.get("/", response_class=HTMLResponse)
-async def read_index():
-    return read_content('segDrawer.html')
+app.mount("/assets", StaticFiles(directory="assets"), name="static")
+
+app.mount("/", StaticFiles(directory="."), name="index")
+
+
+# @app.get("/", response_class=HTMLResponse)
+# async def read_index():
+#     return read_content('segDrawer.html')
 
 import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=7860)
