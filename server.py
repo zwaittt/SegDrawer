@@ -4,6 +4,7 @@ from starlette.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 
 from mobile_sam import SamAutomaticMaskGenerator as MobileSamAutomaticMaskGenerator, sam_model_registry as mobile_sam_model_registry, SamPredictor as MobileSamPredictor
 
@@ -21,6 +22,7 @@ import numpy as np
 from io import BytesIO
 from PIL import Image
 from base64 import b64encode, b64decode
+from typing import Any
 
 def pil_image_to_base64(image):
     buffered = BytesIO()
@@ -36,13 +38,17 @@ def read_content(file_path: str) -> str:
 
     return content
 
+def np_to_base64(arr: np.ndarray[Any, np.dtype]):
+    base64_str = b64encode(arr.tobytes()).decode('utf-8')
+    return base64_str
+
 # sam_checkpoint = "sam_vit_l_0b3195.pth" # "sam_vit_l_0b3195.pth" or "sam_vit_h_4b8939.pth"
 # sam_checkpoint = "assets/pt/sam_vit_l_0b3195.pth"
-# sam_checkpoint = "assets/pt/sam_hq_vit_l.pth"
-sam_checkpoint = "assets/pt/mobile_sam.pt"
+sam_checkpoint = "assets/pt/sam_hq_vit_l.pth"
+# sam_checkpoint = "assets/pt/mobile_sam.pt"
 
 # model_type = "vit_l" # "vit_l" or "vit_h"
-model_type = "vit_t"  # mobile sam
+model_type = "vit_l"  # mobile sam
 # device = "cuda" # "cuda" if torch.cuda.is_available() else "cpu"
 if torch.cuda.is_available():
     print('Using GPU')
@@ -52,10 +58,13 @@ else:
     device = 'cpu'
 
 print("Loading model")
-sam = mobile_sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+# sam = mobile_sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+# hq
+sam = Hq_sam_model_registry[model_type](checkpoint=sam_checkpoint).to(device)
+
 print("Finishing loading")
-predictor = MobileSamPredictor(sam)
-mask_generator = MobileSamAutomaticMaskGenerator(sam)
+predictor = HqSamPredictor(sam)
+mask_generator = HqSamAutomaticMaskGenerator(sam)
 
 app = FastAPI(debug=True)
 app.add_middleware(
@@ -65,6 +74,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 
 # Define a palette for video segmentation
 import random
@@ -103,15 +114,22 @@ async def process_images(
     GLOBAL_ZIPBUFFER = None
 
     predictor.set_image(GLOBAL_IMAGE)
-    image_embedding = predictor.get_image_embedding().cpu().numpy()
-    # interm_embedding = torch.stack(predictor.interm_features).cpu().numpy()
-    # print("interm embedding", image_embedding.shape)
+
+    image_embedding_tensor = predictor.get_image_embedding()
+    image_embedding = image_embedding_tensor.cpu().numpy()
+
+    vit_features = predictor.interm_features[0].permute(0, 3, 1, 2) # early-layer ViT feature, after 1st global attention block in ViT
+    hq_features = predictor.model.mask_decoder.embedding_encoder(image_embedding_tensor) + predictor.model.mask_decoder.compress_vit_feat(vit_features)
+    interm_embedding = hq_features.detach().cpu().numpy()
+
+    print("image embedding", image_embedding.shape)
+    print("interm_embedding", interm_embedding.shape)
     # Return a JSON response
     return JSONResponse(
         content={
             "message": "Images received successfully",
-            "data": image_embedding.reshape(-1).tolist(),
-            # "interm_embedding": interm_embedding.reshape(-1).tolist(),
+            "data": np_to_base64(image_embedding.reshape(-1)),
+            "interm_embedding": np_to_base64(interm_embedding.reshape(-1)),
         },
         status_code=200,
     )
