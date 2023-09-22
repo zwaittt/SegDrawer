@@ -10,14 +10,18 @@ import numpy as np
 from io import BytesIO
 from PIL import Image
 from base64 import b64encode
-from typing import Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aiohttp import ClientSession
 
-class SamReqInput(BaseModel):
-    imageUrl: Union[str, None] = None
+class SamRequestDto(BaseModel):
+    imageUrl: str = Field(..., description="URL of the image to do segmentation")
+
+class SamResponseDto(BaseModel):
+    message: str = Field(..., description="Message from the server")
+    image_embedding: str = Field(None, description="Base64 of image embeddings")
+    interm_embedding: str = Field(None, description="Base64 of image interm embeddings")
 
 def pil_image_to_base64(image):
     buffered = BytesIO()
@@ -83,7 +87,7 @@ GLOBAL_IMAGE = None
 GLOBAL_MASK = None
 GLOBAL_ZIPBUFFER = None
 
-@app.post("/image-file")
+@app.post("/image-file", response_model=SamResponseDto)
 async def process_image_file(
     image: UploadFile = File(...)
 ):
@@ -115,15 +119,15 @@ async def process_image_file(
     return JSONResponse(
         content={
             "message": "Images received successfully",
-            "data": np_to_base64(image_embedding.reshape(-1)),
+            "image_embedding": np_to_base64(image_embedding.reshape(-1)),
             "interm_embedding": np_to_base64(interm_embedding.reshape(-1)),
         },
         status_code=200,
     )
 
-@app.post("/image-url")
+@app.post("/image-url", response_model=SamResponseDto)
 async def process_image_url(
-    data: SamReqInput,
+    data: SamRequestDto,
 ):
     if data.imageUrl is None:
         return JSONResponse(
@@ -161,7 +165,7 @@ async def process_image_url(
     return JSONResponse(
         content={
             "message": "Images received successfully",
-            "data": np_to_base64(image_embedding.reshape(-1)),
+            "image_embedding": np_to_base64(image_embedding.reshape(-1)),
             "interm_embedding": np_to_base64(interm_embedding.reshape(-1)),
         },
         status_code=200,
